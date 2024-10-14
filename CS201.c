@@ -3,8 +3,7 @@
 #include <string.h>
 #include <math.h>
 
-// adarsh commit 4th
-// now 5th commit
+
 #define MAX_NAME_LENGTH 100
 #define HASH_LENGTH 65  // SHA-256 hash (64 characters + null terminator)
 #define MAX_BLOCK_KEY 100000000 // Assuming 8 digit block key
