@@ -2,8 +2,9 @@
 #include <stdlib.h>
 #include <string.h>
 #include <math.h>
+#include <time.h>
 
-
+char current_hash[65];
 #define MAX_NAME_LENGTH 100
 #define HASH_LENGTH 65  // SHA-256 hash (64 characters + null terminator)
 #define MAX_BLOCK_KEY 100000000 // Assuming 8 digit block key
@@ -14,11 +15,16 @@ typedef struct Block {
     int roll_no;
     char name[MAX_NAME_LENGTH];
     char dob[11]; // Format: YYYY-MM-DD
-    char current_hash[HASH_LENGTH];
+    long timestamp;
     char previous_hash[HASH_LENGTH];
     int block_key;
     struct Block* next;
 } Block;
+
+
+
+
+
 
 // Define structure for vEB Tree
 typedef struct vEBTree {
@@ -71,7 +77,7 @@ int vEBMember(vEBTree *tree, int x) {
     int low_x = low(x, tree->u);
     return vEBMember(tree->clusters[high_x], low_x);
 }
-Block* arr[131072];
+
 
 // Utility function to insert an element into a vEB tree (for testing)
 void vEBInsert(vEBTree *tree, int x) {
@@ -99,23 +105,78 @@ void vEBInsert(vEBTree *tree, int x) {
     }
 }
 
+
+
+
+
+
+Block* arr[131072];
+// Simple hash function that produces a hexadecimal hash
+unsigned long calculateHash(Block *block) {
+    // Create a simple hash by concatenating the fields
+    char combined[200]; // Buffer to hold combined string
+    snprintf(combined, sizeof(combined), "%d%s%s%ld%s%d",
+             block->roll_no, block->name, block->dob,
+             block->timestamp, block->previous_hash);
+    
+    // Generate a simple hash (for demonstration)
+    unsigned long hash = 5381;
+    int c;
+    char *ptr = combined;
+
+    while ((c = *ptr++)) {
+        hash = ((hash << 5) + hash) + c; // hash * 33 + c
+    }
+
+    return hash;
+
+}
+
+void generateHashString(unsigned long hashValue, char *hashStr) {
+    // Convert the hash value to a hexadecimal string
+    snprintf(hashStr, 65, "%lx", hashValue);
+
+    // Ensure that the hash is represented as a 64-character hexadecimal string
+    for (int i = strlen(hashStr); i < 64; i++) {
+        hashStr[i] = '0'; // Fill remaining with zeros
+    }
+    hashStr[64] = '\0'; // Null-terminate
+}
+
+int hashed_key(int key) {
+    unsigned long hash = 5381;
+    int c;
+
+    // Treating the key as an array of bytes
+    unsigned char *ptr = (unsigned char*)&key; // Use unsigned char for byte-wise operations
+
+    for (size_t i = 0; i < sizeof(int); i++) {
+        c = ptr[i];
+        hash = ((hash << 5) + hash) + c; // hash * 33 + c
+    }
+
+    return hash;
+}
+
 // Create a block with given data
-Block* createBlock(int roll_no, const char* name, const char* dob, int block_key, const char* prev_hash) {
+Block* createBlock(int roll_no, const char* name, const char* dob, int block_key, const char* hash) {
     Block* new_block = (Block*)malloc(sizeof(Block));
     new_block->roll_no = roll_no;
     strncpy(new_block->name, name, MAX_NAME_LENGTH);
     strncpy(new_block->dob, dob, 11);
     new_block->block_key = block_key;
-     
+    
     // Set the previous hash
-    if (prev_hash != NULL) {
-        strncpy(new_block->previous_hash, prev_hash, HASH_LENGTH);
+    if (hash != NULL) {
+        strncpy(new_block->previous_hash, hash, HASH_LENGTH);
     } else {
         strcpy(new_block->previous_hash, "0"); // Genesis block
     }
 
-    // Simulate a hash for the current block (simplified for demonstration)
-    snprintf(new_block->current_hash, HASH_LENGTH, "%d%s%s%s%u", roll_no, name, dob, new_block->previous_hash, block_key);
+
+    new_block->timestamp = time(NULL);
+    unsigned long hashValue = calculateHash(new_block);
+    generateHashString(hashValue, current_hash);
 
     new_block->next = NULL;
     arr[roll_no]=new_block;
@@ -140,21 +201,70 @@ void displayCryptographicData(int roll_no) {
     printf("Cryptographic version of data for roll number %d\n", roll_no);
 }
 
+// Free the blockchain memory
+void freeBlockchain(Block* head) {
+    while (head) {
+        Block* temp = head;
+        head = head->next;
+        free(temp);
+    }
+}
+
+
 // Main program to demonstrate blockchain and VEB tree interaction
 int main() {
+
+
     // Initialize blockchain and VEB tree
     Block* blockchain = NULL;
     vEBTree* veb_tree = createVEBTree(VEB_UNIVERSE); // Universe size for 8-digit block keys
 
-    // Example: Adding blocks
-    blockchain = appendBlock(blockchain, createBlock(12345, "Adarsh", "2001-05-12", 12345678, NULL));
+    blockchain = appendBlock(blockchain, createBlock(12345, "Adarsh", "2001-05-12", hashed_key(12345678), NULL));
     vEBInsert(veb_tree, 12345);
-    
-    blockchain = appendBlock(blockchain, createBlock(54321, "Rishabh", "2002-11-23", 87654321, blockchain->current_hash));
+
+    blockchain = appendBlock(blockchain, createBlock(54321, "Rishabh", "2002-11-23", hashed_key(87654321), current_hash));
     vEBInsert(veb_tree, 54321);
 
-    blockchain = appendBlock(blockchain, createBlock(66666, "Aditya", "2012-09-20", 12341234, blockchain->current_hash));
+    blockchain = appendBlock(blockchain, createBlock(95995, "Anil", "2004-09-08", hashed_key(10101010), current_hash));
+    vEBInsert(veb_tree, 95995);
+
+    blockchain = appendBlock(blockchain, createBlock(66666, "Aditya", "2012-09-20", hashed_key(12341234), current_hash));
     vEBInsert(veb_tree, 66666);
+
+   // vEBInsert(veb_tree, 15776);
+    vEBInsert(veb_tree, 91562);
+    vEBInsert(veb_tree, 96702);
+   // vEBInsert(veb_tree, 95985);
+   // vEBInsert(veb_tree, 79853);
+
+    FILE *file = fopen("random_entries.csv", "r");
+    if (file == NULL) {
+        printf("Could not open file.\n");
+        return 1;
+    }
+
+    char line[200];
+    while (fgets(line, sizeof(line), file)) {
+        // Tokenize line by commas
+        char *id_str = strtok(line, ",");
+        char *name = strtok(NULL, ",");
+        char *date = strtok(NULL, ",");
+        char *num_str = strtok(NULL, ",");
+
+        int id = atoi(id_str);
+        int num = atoi(num_str);
+
+        if (id && name && date && num) {
+            printf("Roll number: %d\n", id);
+            printf("Block key: %d\n", num);
+            printf("Name: %s\n", name);
+            printf("DOB: %s\n", date);
+            blockchain = appendBlock(blockchain, createBlock(id, name, date, hashed_key(num), current_hash));
+            vEBInsert(veb_tree, id);
+        }
+    }
+
+    fclose(file);
     
     int block_key;
     int roll_no;
@@ -168,9 +278,12 @@ int main() {
         printf("Enter your block key: ");
         scanf("%d", &block_key);
         Block *block = arr[roll_no];
-        if (block->block_key == block_key) {
+        if (block->block_key == hashed_key(block_key)) {
             printf("Name: %s\n", block->name);
             printf("DOB: %s\n", block->dob);
+            printf("Hash: %s\n", block->previous_hash);
+            printf("Block key: %d\n", block->block_key);
+
         } else {
             displayCryptographicData(roll_no);
         }
@@ -178,10 +291,10 @@ int main() {
         printf("User not found\n");
     }
 
+    freeBlockchain(blockchain);
     return 0;
 }
 
 
 // Cryptography of the data stored in block is not implemented
-// Hashing of block is not implemented
-// Hashing of block keys/passwords is not implemented(for password security)
+// Matching the hash of block with previous hash of next block is not implemented
