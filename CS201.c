@@ -9,6 +9,7 @@ char current_hash[65];
 #define HASH_LENGTH 65  // SHA-256 hash (64 characters + null terminator)
 #define MAX_BLOCK_KEY 100000000 // Assuming 8 digit block key
 #define VEB_UNIVERSE 131072  // For 16-bit universe size (simplified)
+char key[11]= "supersecret"; // Key for encryption
 
 // Block structure
 typedef struct Block {
@@ -182,12 +183,30 @@ int hashed_key(int key) {
     return hash;
 }
 
+// XOR cipher for encryption and decryption
+char xor_cipher(char data, char key) {
+    return data ^ key;
+}
+
+// Decrypt the data
+char* decrypt(char* data) {
+    char* decrypted = (char*)malloc(strlen(data) + 1);
+    for (int i = 0; i < strlen(data); i++) {
+        decrypted[i] = xor_cipher(data[i], key[i%11]);
+    }
+    return decrypted;
+}
+
 // Create a block with given data
 Block* createBlock(int roll_no, const char* name, const char* dob, int block_key, const char* hash) {
     Block* new_block = (Block*)malloc(sizeof(Block));
     new_block->roll_no = roll_no;
-    strncpy(new_block->name, name, MAX_NAME_LENGTH);
-    strncpy(new_block->dob, dob, 11);
+    for (int i = 0; i < MAX_NAME_LENGTH; i++) {
+        new_block->name[i] = xor_cipher(name[i], key[i%11]);
+    }
+    for (int i = 0; i < 11; i++) {
+        new_block->dob[i] = xor_cipher(dob[i], key[i%11]);
+    }
     new_block->block_key = block_key;
     
     // Set the previous hash
@@ -295,13 +314,20 @@ int main() {
         scanf("%d", &block_key);
         Block *block = arr[roll_no];
         if (block->block_key == hashed_key(block_key)) {
-            printf("Name: %s\n", block->name);
-            printf("DOB: %s\n", block->dob);
+            printf("--------------------\n");
+            printf("Welcome %s\n", decrypt(block->name));
+            printf("Name: %s\n", decrypt(block->name));
+            printf("DOB: %s\n", decrypt(block->dob));
             printf("Hash: %s\n", block->previous_hash);
             printf("Block key: %d\n", block->block_key);
 
         } else {
-            displayCryptographicData(roll_no);
+            printf("--------------------\n");
+            printf("Invalid block key\n");
+            printf("Name: %s\n", block->name);
+            printf("DOB: %s\n", block->dob);
+            printf("Hash: %s\n", block->previous_hash);
+            printf("Block key: %d\n", block->block_key);
         }
     }else{
         printf("User not found\n");
