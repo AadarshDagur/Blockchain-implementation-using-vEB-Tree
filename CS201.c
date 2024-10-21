@@ -26,7 +26,6 @@ typedef struct Block {
 
 
 
-// Define structure for vEB Tree
 typedef struct vEBTree {
     int u;                   // Universe size
     int min, max;             // Minimum and Maximum values in the tree
@@ -44,11 +43,11 @@ vEBTree *createVEBTree(int u) {
         tree->summary = NULL;
         tree->clusters = NULL;
     } else {
-        int sqrt_u = (int)sqrt(u);
+        int sqrt_u = (int)ceil(sqrt(u));
         tree->summary = createVEBTree(sqrt_u);
         tree->clusters = (vEBTree **)malloc(sqrt_u * sizeof(vEBTree *));
         for (int i = 0; i < sqrt_u; i++) {
-            tree->clusters[i] = createVEBTree(sqrt_u);
+            tree->clusters[i] = NULL; // Initialize clusters to NULL
         }
     }
     return tree;
@@ -56,13 +55,12 @@ vEBTree *createVEBTree(int u) {
 
 // Helper functions to calculate high and low bits (for mapping within clusters)
 int high(int x, int u) {
-    return x / (int)sqrt(u);
+    return x / (int)ceil(sqrt(u));
 }
 
 int low(int x, int u) {
-    return x % (int)sqrt(u);
+    return x % (int)ceil(sqrt(u));
 }
-
 
 // Function to check if a number exists in the vEB tree
 int vEBMember(vEBTree *tree, int x) {
@@ -72,17 +70,19 @@ int vEBMember(vEBTree *tree, int x) {
     if (tree->u <= 2) {
         return 0;  // If universe size is 2 or smaller and it's not min or max, it doesn't exist
     }
-    
+
     int high_x = high(x, tree->u);
     int low_x = low(x, tree->u);
+    if (tree->clusters[high_x] == NULL) {
+        return 0;  // The number is not in this cluster
+    }
     return vEBMember(tree->clusters[high_x], low_x);
 }
 
-
-// Utility function to insert an element into a vEB tree (for testing)
+// Utility function to insert an element into a vEB tree
 void vEBInsert(vEBTree *tree, int x) {
     if (tree->min == -1) {
-        tree->min = tree->max = x;
+        tree->min = tree->max = x;  // Tree was empty, now has one element
     } else {
         if (x < tree->min) {
             int temp = x;
@@ -92,6 +92,9 @@ void vEBInsert(vEBTree *tree, int x) {
         if (tree->u > 2) {
             int high_x = high(x, tree->u);
             int low_x = low(x, tree->u);
+            if (tree->clusters[high_x] == NULL) {
+                tree->clusters[high_x] = createVEBTree((int)ceil(sqrt(tree->u)));
+            }
             if (tree->clusters[high_x]->min == -1) {
                 vEBInsert(tree->summary, high_x);
                 tree->clusters[high_x]->min = tree->clusters[high_x]->max = low_x;
@@ -105,12 +108,33 @@ void vEBInsert(vEBTree *tree, int x) {
     }
 }
 
+// Function to free a vEB tree
+void freeVEBTree(vEBTree *tree) {
+    if (tree == NULL) return;
+
+    if (tree->u > 2) {
+        int sqrt_u = (int)ceil(sqrt(tree->u));
+
+        // Recursively free all clusters
+        for (int i = 0; i < sqrt_u; i++) {
+            if (tree->clusters[i] != NULL) {
+                freeVEBTree(tree->clusters[i]);
+            }
+        }
+
+        // Free the clusters array and the summary
+        free(tree->clusters);
+        freeVEBTree(tree->summary);
+    }
+
+    // Finally, free the tree itself
+    free(tree);
+}
+
+Block* arr[100000];
 
 
 
-
-
-Block* arr[131072];
 // Simple hash function that produces a hexadecimal hash
 unsigned long calculateHash(Block *block) {
     // Create a simple hash by concatenating the fields
@@ -225,17 +249,13 @@ int main() {
     blockchain = appendBlock(blockchain, createBlock(54321, "Rishabh", "2002-11-23", hashed_key(87654321), current_hash));
     vEBInsert(veb_tree, 54321);
 
-    blockchain = appendBlock(blockchain, createBlock(95995, "Anil", "2004-09-08", hashed_key(10101010), current_hash));
-    vEBInsert(veb_tree, 95995);
+    blockchain = appendBlock(blockchain, createBlock(65060, "Anil", "2004-09-08", hashed_key(10101010), current_hash));
+    vEBInsert(veb_tree, 65060);
 
     blockchain = appendBlock(blockchain, createBlock(66666, "Aditya", "2012-09-20", hashed_key(12341234), current_hash));
     vEBInsert(veb_tree, 66666);
 
-   // vEBInsert(veb_tree, 15776);
-    vEBInsert(veb_tree, 91562);
-    vEBInsert(veb_tree, 96702);
-   // vEBInsert(veb_tree, 95985);
-   // vEBInsert(veb_tree, 79853);
+
 
     FILE *file = fopen("random_entries.csv", "r");
     if (file == NULL) {
@@ -255,10 +275,6 @@ int main() {
         int num = atoi(num_str);
 
         if (id && name && date && num) {
-            printf("Roll number: %d\n", id);
-            printf("Block key: %d\n", num);
-            printf("Name: %s\n", name);
-            printf("DOB: %s\n", date);
             blockchain = appendBlock(blockchain, createBlock(id, name, date, hashed_key(num), current_hash));
             vEBInsert(veb_tree, id);
         }
@@ -290,7 +306,7 @@ int main() {
     }else{
         printf("User not found\n");
     }
-
+    freeVEBTree(veb_tree);
     freeBlockchain(blockchain);
     return 0;
 }
