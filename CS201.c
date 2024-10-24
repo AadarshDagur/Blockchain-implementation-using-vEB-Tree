@@ -3,6 +3,8 @@
 #include <string.h>
 #include <math.h>
 #include <time.h>
+#include <uthash.h>
+
 
 char current_hash[65];
 #define MAX_NAME_LENGTH 100
@@ -15,7 +17,7 @@ char key[11]= "supersecret"; // Key for encryption
 typedef struct Block {
     int roll_no;
     char name[MAX_NAME_LENGTH];
-    char dob[11]; // Format: YYYY-MM-DD
+    char dob[11];
     long timestamp;
     char previous_hash[HASH_LENGTH];
     int block_key;
@@ -24,7 +26,13 @@ typedef struct Block {
 
 
 
+typedef struct {
+    int roll_no;        // Key
+    Block *block_data;  // Pointer to the block
+    UT_hash_handle hh;  // Handle for the hash table
+} BlockMap;
 
+BlockMap *block_map = NULL;
 
 
 typedef struct vEBTree {
@@ -38,7 +46,7 @@ typedef struct vEBTree {
 vEBTree *createVEBTree(int u) {
     vEBTree *tree = (vEBTree *)malloc(sizeof(vEBTree));
     tree->u = u;
-    tree->min = tree->max = -1; // Initially, the tree is empty (no elements)
+    tree->min = tree->max = -1; 
     
     if (u <= 2) {
         tree->summary = NULL;
@@ -132,7 +140,6 @@ void freeVEBTree(vEBTree *tree) {
     free(tree);
 }
 
-Block* arr[100000];
 
 
 
@@ -197,6 +204,28 @@ char* decrypt(char* data) {
     return decrypted;
 }
 
+void add_block_to_map(int roll_no, Block *block) {
+    BlockMap *entry = (BlockMap *)malloc(sizeof(BlockMap));
+    entry->roll_no = roll_no;
+    entry->block_data = block;
+    HASH_ADD_INT(block_map, roll_no, entry);
+}
+
+Block *find_block_in_map(int roll_no) {
+    BlockMap *entry;
+    HASH_FIND_INT(block_map, &roll_no, entry);
+    return entry ? entry->block_data : NULL;
+}
+
+// Free the block map
+void freeBlockMap() {
+    BlockMap *current_entry, *tmp;
+    HASH_ITER(hh, block_map, current_entry, tmp) {
+        HASH_DEL(block_map, current_entry);
+        free(current_entry);
+    }
+}
+
 // Create a block with given data
 Block* createBlock(int roll_no, const char* name, const char* dob, int block_key, const char* hash) {
     Block* new_block = (Block*)malloc(sizeof(Block));
@@ -222,7 +251,7 @@ Block* createBlock(int roll_no, const char* name, const char* dob, int block_key
     generateHashString(hashValue, current_hash);
 
     new_block->next = NULL;
-    arr[roll_no]=new_block;
+    add_block_to_map(roll_no, new_block);
     return new_block;
 }
 
@@ -260,7 +289,6 @@ int main() {
     // Initialize blockchain and VEB tree
     Block* blockchain = NULL;
     vEBTree* veb_tree = createVEBTree(VEB_UNIVERSE); // Universe size for 8-digit block keys
-
     blockchain = appendBlock(blockchain, createBlock(12345, "Adarsh", "2001-05-12", hashed_key(12345678), NULL));
     vEBInsert(veb_tree, 12345);
 
@@ -306,8 +334,9 @@ int main() {
         printf("--------------------\n");
         printf("Menu:\n");
         printf("1. Check your data\n");
-        printf("2. Check if blockchain is tampered\n");
-        printf("3. Exit\n");
+        printf("2. Enter a new block\n");
+        printf("3. Check if blockchain is tampered\n");
+        printf("4. Exit\n");
         printf("Enter your choice: ");
         scanf("%d", &choice);
         printf("--------------------\n");
@@ -325,7 +354,7 @@ int main() {
                 if (vEBMember(veb_tree, roll_no)) {
                     printf("Enter your block key: ");
                     scanf("%d", &block_key);
-                    Block *block = arr[roll_no];
+                    Block* block = find_block_in_map(roll_no);
                     if (block->block_key == hashed_key(block_key)) {
                         printf("--------------------\n");
                         printf("Welcome %s\n", decrypt(block->name));
@@ -347,7 +376,41 @@ int main() {
                 }
                 break;
             }
-            case 2: {
+            case 2:{
+                char name[MAX_NAME_LENGTH];
+                char dob[11]; 
+                int block_key;
+
+                printf("Enter your name: ");
+                scanf(" %[^\n]%*c", name);
+
+                printf("Enter your date of birth (YYYY-MM-DD): ");
+                scanf("%10s", dob);
+
+                printf("Enter an 8-digit block key: ");
+                scanf("%d", &block_key);
+
+                int roll_num;
+                for (int i=10001;i<=99999;i++){
+                    if (vEBMember(veb_tree, i)) {
+                        continue;
+                    }else{
+                        roll_num=i;
+                        break;
+                    }
+                }
+            
+
+                // Create a new block
+                Block* new_block = createBlock(roll_num, name, dob, hashed_key(block_key), current_hash);
+                blockchain = appendBlock(blockchain, new_block);
+                vEBInsert(veb_tree, roll_num); 
+                
+
+                printf("New block created successfully with roll no %d!\n",roll_num);
+                break;
+            }
+            case 3: {
                 // Check if blockchain is tampered
                 int c = 0;
                 Block* current_block = blockchain;
@@ -356,10 +419,12 @@ int main() {
                     unsigned long hashValue = calculateHash(current_block);
                     generateHashString(hashValue, hash);
                     if (strcmp(hash, current_block->next->previous_hash) != 0) {
+                        printf("Block %d is not valid\n", current_block->roll_no);
                         printf("Blockchain is tampered\n");
                         c = 1;
                         break;
                     }
+                    printf("Block %d is valid\n", current_block->roll_no);
                     current_block = current_block->next;
                 }
                 if (c == 0) {
@@ -367,17 +432,20 @@ int main() {
                 }
                 break;
             }
-            case 3: {
+            case 4: {
                 printf("Exiting...\n");
                 freeVEBTree(veb_tree);
                 freeBlockchain(blockchain);
+                freeBlockMap();
                 return 0;
             }
             default: {
                 printf("Invalid choice. Please try again.\n");
                 break;
             }
+
         }
+
     }
 
     return 0;
