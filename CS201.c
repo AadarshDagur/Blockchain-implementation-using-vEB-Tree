@@ -257,7 +257,6 @@ void freeBlockchain(Block* head) {
 // Main program to demonstrate blockchain and VEB tree interaction
 int main() {
 
-
     // Initialize blockchain and VEB tree
     Block* blockchain = NULL;
     vEBTree* veb_tree = createVEBTree(VEB_UNIVERSE); // Universe size for 8-digit block keys
@@ -275,7 +274,7 @@ int main() {
     vEBInsert(veb_tree, 66666);
 
 
-
+    // Load additional blocks from a CSV file
     FILE *file = fopen("random_entries.csv", "r");
     if (file == NULL) {
         printf("Could not open file.\n");
@@ -284,7 +283,7 @@ int main() {
 
     char line[200];
     while (fgets(line, sizeof(line), file)) {
-        // Tokenize line by commas
+        
         char *id_str = strtok(line, ",");
         char *name = strtok(NULL, ",");
         char *date = strtok(NULL, ",");
@@ -300,43 +299,86 @@ int main() {
     }
 
     fclose(file);
-    
-    int block_key;
-    int roll_no;
 
-    // User input
-    printf("Enter your roll number: ");
-    scanf("%d", &roll_no);
-    
-    // Search block key in veb tree
-    if (vEBMember(veb_tree, roll_no)) {        
-        printf("Enter your block key: ");
-        scanf("%d", &block_key);
-        Block *block = arr[roll_no];
-        if (block->block_key == hashed_key(block_key)) {
-            printf("--------------------\n");
-            printf("Welcome %s\n", decrypt(block->name));
-            printf("Name: %s\n", decrypt(block->name));
-            printf("DOB: %s\n", decrypt(block->dob));
-            printf("Hash: %s\n", block->previous_hash);
-            printf("Block key: %d\n", block->block_key);
+    // Main menu loop
+    int choice;
+    while (1) {
+        printf("--------------------\n");
+        printf("Menu:\n");
+        printf("1. Check your data\n");
+        printf("2. Check if blockchain is tampered\n");
+        printf("3. Exit\n");
+        printf("Enter your choice: ");
+        scanf("%d", &choice);
+        printf("--------------------\n");
 
-        } else {
-            printf("--------------------\n");
-            printf("Invalid block key\n");
-            printf("Name: %s\n", block->name);
-            printf("DOB: %s\n", block->dob);
-            printf("Hash: %s\n", block->previous_hash);
-            printf("Block key: %d\n", block->block_key);
+        switch (choice) {
+            case 1: {
+                int block_key;
+                int roll_no;
+
+                // User input for roll number
+                printf("Enter your roll number: ");
+                scanf("%d", &roll_no);
+                
+                // Search block key in veb tree
+                if (vEBMember(veb_tree, roll_no)) {
+                    printf("Enter your block key: ");
+                    scanf("%d", &block_key);
+                    Block *block = arr[roll_no];
+                    if (block->block_key == hashed_key(block_key)) {
+                        printf("--------------------\n");
+                        printf("Welcome %s\n", decrypt(block->name));
+                        printf("Name: %s\n", decrypt(block->name));
+                        printf("DOB: %s\n", decrypt(block->dob));
+                        printf("Hash: %s\n", block->previous_hash);
+                        printf("Block key: %d\n", block->block_key);
+
+                    } else {
+                        printf("--------------------\n");
+                        printf("Invalid block key\n");
+                        printf("Name: %s\n", block->name);
+                        printf("DOB: %s\n", block->dob);
+                        printf("Hash: %s\n", block->previous_hash);
+                        printf("Block key: %d\n", block->block_key);
+                    }
+                } else {
+                    printf("User not found\n");
+                }
+                break;
+            }
+            case 2: {
+                // Check if blockchain is tampered
+                int c = 0;
+                Block* current_block = blockchain;
+                while (current_block->next != NULL) {
+                    char hash[65];
+                    unsigned long hashValue = calculateHash(current_block);
+                    generateHashString(hashValue, hash);
+                    if (strcmp(hash, current_block->next->previous_hash) != 0) {
+                        printf("Blockchain is tampered\n");
+                        c = 1;
+                        break;
+                    }
+                    current_block = current_block->next;
+                }
+                if (c == 0) {
+                    printf("Blockchain is not tampered\n");
+                }
+                break;
+            }
+            case 3: {
+                printf("Exiting...\n");
+                freeVEBTree(veb_tree);
+                freeBlockchain(blockchain);
+                return 0;
+            }
+            default: {
+                printf("Invalid choice. Please try again.\n");
+                break;
+            }
         }
-    }else{
-        printf("User not found\n");
     }
-    freeVEBTree(veb_tree);
-    freeBlockchain(blockchain);
+
     return 0;
 }
-
-
-// Cryptography of the data stored in block is not implemented
-// Matching the hash of block with previous hash of next block is not implemented
